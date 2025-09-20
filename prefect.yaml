@@ -1,0 +1,27 @@
+pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/NeuroGranberg/hello_world_pipeline.git  # update after you publish your repo
+      branch: main
+
+build:
+  - prefect.deployments.steps.python_import:
+      function: flows.hello.hello_flow
+
+push: []
+
+deployments:
+  - name: hello:local-cpu
+    entrypoint: flows/hello.py:hello_flow
+    work_pool:
+      name: local-cpu-pool
+    parameters:
+      name: "World"
+
+  - name: hello:docker-cpu
+    entrypoint: flows/hello.py:hello_flow
+    work_pool:
+      name: docker-cpu-pool
+      job_variables:
+        image: "{{ env('PIPELINE_IMAGE', 'ghcr.io/your-org/hello-world:latest') }}"
+    parameters:
+      name: "World"
