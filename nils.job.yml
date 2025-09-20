@@ -3,5 +3,5 @@ entrypoints:
   - flows/hello.py:hello_flow
 parameters:
   name: "World"
-image: ghcr.io/your-org/hello-world:latest
+image: ghcr.io/NeuroGranberg/hello-world:latest
 default_branch: main
