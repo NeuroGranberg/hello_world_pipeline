@@ -1,13 +1,43 @@
-# Minimal image for the hello-world pipeline.
-# Replace the base image if you need GPUs or system packages.
-FROM prefecthq/prefect:3-python3.11
+# Multi-stage build for maximum optimization
+# Build stage
+FROM python:3.11-slim as builder
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy flow code last to maximise layer cache hits.
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+
+# Runtime stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN addgroup --system appgroup && adduser --system --group appuser
+
+# Copy wheels from builder stage
+COPY --from=builder /wheels /wheels
+
+# Install Python packages from wheels
+RUN pip install --no-cache-dir /wheels/*
+
+# Copy application code
 COPY flows/ ./flows/
 
-# The Prefect worker sets the entrypoint; no CMD is required here.
+# Switch to non-root user
+USER appuser
+
+# The Prefect worker will set the entrypoint
