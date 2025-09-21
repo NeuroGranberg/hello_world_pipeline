@@ -20,7 +20,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install only runtime dependencies
+# Install only runtime dependencies (keep Python 3.11 from base image)
 RUN apt-get update && apt-get install -y \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
@@ -37,7 +37,13 @@ RUN pip install --no-cache-dir /wheels/*
 # Copy application code
 COPY flows/ ./flows/
 
+# Change ownership of the app directory to the non-root user
+RUN chown -R appuser:appgroup /app
+
 # Switch to non-root user
 USER appuser
+
+# Verify Python is accessible
+RUN python3 --version && which python3
 
 # The Prefect worker will set the entrypoint
