@@ -1,3 +1,21 @@
+# Multi-stage build for maximum optimization
+# Build stage
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    --no-install-recommends \
+    gcc \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
+
 # Runtime stage
 FROM python:3.11-slim
 
