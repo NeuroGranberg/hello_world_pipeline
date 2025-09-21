@@ -1,7 +1,7 @@
 pull:
   - prefect.deployments.steps.git_clone:
-      repository: https://github.com/NeuroGranberg/hello_world_pipeline.git  # update after you publish your repo
-      branch: main
+      repository: "{{ env('PIPELINE_REPOSITORY', 'https://github.com/NeuroGranberg/hello_world_pipeline.git') }}"
+      branch: "{{ env('PIPELINE_BRANCH', 'main') }}"
 
 build:
   - prefect.deployments.steps.python_import:

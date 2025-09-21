@@ -1,142 +1,133 @@
-# Hello World Pipeline Template
+# Hello World Prefect Pipeline Template
 
-This repository is a minimal, convention-complete Prefect pipeline that integrates cleanly with the NILS platform. Use it as a starting point for any new pipeline you want to register in NILS.
+This repository is a turnkey starting point for authoring Prefect flows that plug into the NILS platform. Clone it when you need a new pipeline, replace the placeholder flow with your business logic, and push the repo to a Git host that NILS can reach.
 
-## Repository Layout
+## 1. Repo Layout
 
 ```
 hello_world_pipeline/
-├── flows/
-│   └── hello.py           # Prefect flow and tasks
-├── Dockerfile             # Container image used by docker/k8s work pools
-├── prefect.yaml           # Optional CLI/CI deployment blueprint
-├── deploy.py              # Python deployment helper (pins Git SHAs)
-├── nils.job.yml           # Manifest consumed by the NILS backend
-├── requirements.txt       # Runtime dependencies for the flow
-├── README.md              # You are here
-└── .gitignore
+├── flows/hello.py          # Prefect flow entrypoint used by NILS & Prefect
+├── nils.job.yml            # NILS manifest (pipeline metadata & defaults)
+├── Dockerfile              # Runtime environment for docker/k8s work pools
+├── requirements.txt        # Python dependencies installed in the image
+├── prefect.yaml            # Optional Prefect deploy spec (CLI / CI friendly)
+├── deploy.py               # Minimal Python helper for manual deployments
+└── README.md               # Documentation (update me!)
 ```
 
-Key conventions:
+Keep these files, but rename things inside them to fit your project:
 
-- **`flows/`** contains one or more Prefect flows. Each flow must be importable by the entrypoint referenced in `nils.job.yml`.
-- **`nils.job.yml`** is the manifest NILS reads when a repository is registered. At a minimum it declares the pipeline name, the list of entrypoints, default parameters, and the default branch.
-- **`Dockerfile`** defines the runtime. Prefect’s Docker workers start this image for every run (use a CUDA base when you need GPUs).
-- **`deploy.py` / `prefect.yaml`** describe how to create Prefect deployments for the defined flows and reference the container image you publish.
-- **`requirements.txt`** only includes dependencies needed at runtime by the pipeline. Keep it minimal so builds stay fast.
+- `flows/` — put each Prefect flow in this package. The entrypoint string in `nils.job.yml` **must** resolve to one of these flows (e.g. `flows.my_flow:main`).
+- `nils.job.yml` — NILS reads this at registration time. It defines the pipeline slug, entrypoints, default parameters, Docker image, and default branch.
+- `Dockerfile` — either extend the stock Python image (for CPU flows) or use CUDA/cuDNN variants when you need GPU support. Install everything your flow imports.
+- `prefect.yaml` / `deploy.py` — optional helper configs for registering Prefect deployments outside NILS. Keep them if you run `prefect deploy` in CI.
 
-## How to Adapt This Template
+## 2. Creating a New Pipeline From This Template
 
-1. Create a new repository (private or public) for your pipeline.
-2. Copy this template into the new repo:
+```bash
+# 1) Grab the template and start fresh
+cd /path/to/your/workspace
+git clone https://github.com/NeuroGranberg/hello_world_pipeline.git my_pipeline
+cd my_pipeline
+rm -rf .git
+
+# 2) Initialise your own repository
+git init
+git add .
+git commit -m "Initial pipeline from NILS template"
+git branch -M main
+git remote add origin <your-remote-url>
+
+git push -u origin main
+```
+
+Now customise:
+
+1. Rename the flow and module in `flows/hello.py`; update docstrings and logging.
+2. Update `nils.job.yml`
+   - `name`: becomes the pipeline identifier inside NILS.
+   - `entrypoints`: list of Prefect entrypoints (file:flow).
+   - `parameters`: default values for optional parameters.
+   - `image`: container image to run (you can omit it if you want NILS to build locally).
+3. Edit `requirements.txt` and `Dockerfile` with the runtime libraries your flow needs.
+4. Describe the pipeline, params, inputs/outputs, and data contracts in this README.
+5. (Optional) Replace the Prefect deployment helpers (`prefect.yaml`, `deploy.py`) with your project-specific names and work pools.
+
+## 3. Local Development Workflow
+
+1. **Install dependencies**
    ```bash
-   git clone https://github.com/NeuroGranberg/hello_world_pipeline.git
-   mv hello_world_pipeline <your-pipeline-name>
-   cd <your-pipeline-name>
-   rm -rf .git
-   git init
-   git add .
-   git commit -m "Initial pipeline from template"
-   git branch -M main
-   git remote add origin <your-remote-url>
-   git push -u origin main
-   ```
-3. Update the files listed below with your pipeline-specific details:
-   - `flows/hello.py` → rename the module and flow, add your logic, keep the `log_prints=True` flag for quick debugging.
-   - `nils.job.yml` → change the `name`, `entrypoints`, `default_branch`, parameter defaults, and the published `image`. Omit keys that should remain required at run time.
-   - `requirements.txt` → add any libraries your flow imports.
-   - `Dockerfile` → install the libraries and system packages your pipeline requires.
-   - `prefect.yaml` / `deploy.py` → adjust the repository URL placeholders, entrypoints, work pools, and the container image reference you plan to publish.
-   - `README.md` → describe the pipeline, its parameters, inputs/outputs, and any operational runbooks.
-
-## Local Development Workflow
-
-1. Install dependencies:
-   ```bash
-   python -m venv .venv
+   python3 -m venv .venv
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
-2. Run the flow locally (without Prefect orchestration):
+
+2. **Smoke-test the flow** (runs outside Prefect):
    ```bash
    python flows/hello.py --name "NILS"
    ```
-   The script is CLI-friendly so you can smoke-test parameters quickly.
-3. Execute the same flow inside the container image (no Prefect required):
+
+3. **Lint & test** — add your preferred test framework / lint tool. Place tests under `tests/`.
+
+## 4. Build & Publish the Docker Image
+
+NILS can build your image automatically when registering the repo, but production pipelines usually publish immutable images per commit. A simple manual flow:
+
+```bash
+export SHA=$(git rev-parse HEAD)
+export IMAGE=ghcr.io/your-org/hello-world:${SHA}
+
+docker build -t ${IMAGE} .
+docker push ${IMAGE}
+```
+
+Update `nils.job.yml:image` (and `prefect.yaml` if you keep it) to reference the pushed image. When NILS discovers the repo it will reuse that image for Docker work pools.
+
+## 5. Optional: Prefect Deployments Outside NILS
+
+### CLI (`prefect.yaml`)
+Use Prefect’s declarative deploy spec:
+
+```bash
+PIPELINE_IMAGE=ghcr.io/your-org/hello-world:$(git rev-parse HEAD) \
+  prefect deploy --prefect-yaml prefect.yaml --name hello:docker-cpu
+```
+
+### Python helper (`deploy.py`)
+Set `PIPELINE_IMAGE` and run:
+
+```bash
+PIPELINE_IMAGE=ghcr.io/your-org/hello-world:$(git rev-parse HEAD) \
+  python deploy.py
+```
+
+Both options register `hello:docker-cpu` and `hello:local-cpu` deployments against the active Prefect server.
+
+## 6. Registering With NILS
+
+Once your repository is online:
+
+1. Ensure the Prefect work pools referenced in `nils.job.yml` exist (run `scripts/setup-prefect.sh` from the NILS repo if needed).
+2. In the NILS UI, open **Pipelines → Add pipeline** and provide:
+   - Repository URL (e.g. `https://github.com/YourOrg/my_pipeline.git`)
+   - Resource class (`docker-cpu`, `local-cpu`, etc.)
+   - Optional branch or commit SHA
+3. NILS clones the repo, reads `nils.job.yml`, builds the Docker image if necessary, registers Prefect deployments, and shows the pipeline.
+4. Launch runs from the UI or via API:
    ```bash
-    docker run --rm ghcr.io/your-org/hello-world:latest python flows/hello.py --name "NILS"
+   curl -X POST https://nils.local/api/jobs/<pipeline-id>/runs \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"parameters": {"name": "World"}}'
    ```
-4. Build the container image and push it to your registry:
-   ```bash
-   export SHA=$(git rev-parse HEAD)
-   export IMAGE=ghcr.io/your-org/hello-world:$SHA
-   docker build -t $IMAGE .
-   docker push $IMAGE
-   ```
-5. (Optional) Unit test your task logic. Use your preferred test framework and keep tests under a `tests/` directory.
 
-## Registering the Pipeline with Prefect
+## 7. Checklist Before Sharing Your Pipeline
 
-Two common options are included:
+- [ ] Flow code cleaned up (no template logging or TODOs).
+- [ ] Parameters documented here and in `nils.job.yml`.
+- [ ] Docker image published (or verified that auto-build works).
+- [ ] Tests cover critical logic.
+- [ ] Prefect deployments verified in staging.
+- [ ] Repository permissions configured so NILS can clone it.
 
-### 1. `deploy.py`
-
-Run the deployment helper whenever you want to (re)register deployments. It captures the current Git SHA so runs are reproducible. Set `PIPELINE_IMAGE` to the image you built before invoking the script.
-
-```bash
-export PIPELINE_IMAGE=ghcr.io/your-org/hello-world:$(git rev-parse HEAD)
-python deploy.py
-```
-
-### 2. `prefect.yaml`
-
-If you prefer CLI-only deployment or CI pipelines, use:
-
-```bash
-PIPELINE_IMAGE=ghcr.io/your-org/hello-world:$(git rev-parse HEAD) prefect deploy --name hello:docker-cpu
-```
-
-You can check in both files and pick the style that suits your automation.
-
-## Registering the Pipeline with NILS
-
-Once the repository is pushed:
-
-1. Ensure the desired Prefect work pools exist (see the NILS Prefect guide).
-2. In NILS, go to the Pipelines page and choose “Add pipeline”.
-3. Provide the Git URL (`https://github.com/YourOrg/<your-pipeline-name>.git`), select a resource class (maps to a work pool), and submit.
-4. NILS clones the repository, reads `nils.job.yml`, registers deployments, and exposes the pipeline in the UI.
-
-You can also register via REST for automation:
-
-```bash
-curl -X POST https://nils.local/api/jobs/resources \
-  -H "Authorization: Bearer <token>" \
-  -H "Content-Type: application/json" \
-  -d '{
-        "repo_url": "https://github.com/YourOrg/<your-pipeline-name>.git",
-        "resource_class": "docker-cpu",
-        "branch": "main"
-      }'
-```
-
-## Parameters & Monitoring
-
-- Declare optional parameters with defaults in `nils.job.yml`; leave required ones out so NILS prompts for them.
-- Launch runs from the NILS GUI or call `POST /jobs/{job_id}/runs` with payloads like `{"parameters": {"name": "NILS"}}`.
-- Watch logs and state transitions in the pipeline detail drawer; the backend streams Prefect status through Server-Sent Events.
-
-## Customisation Checklist
-
-Before handing the pipeline to users:
-
-- [ ] Rename the flow, update docstrings, and remove template comments.
-- [ ] Document parameters and expected outputs in `README.md`.
-- [ ] Build and publish a container image for each deployable revision (CI recommended).
-- [ ] Add schema validation (e.g., Pydantic) if your pipeline expects structured inputs.
-- [ ] Add tests for critical logic.
-- [ ] Set up a CI workflow to run tests and trigger `deploy.py` or `prefect deploy` on merge.
-
-## License
-
-Choose a license that fits your team. The template ships without one so you can decide.
+Happy building! Update this README whenever the pipeline contract changes so downstream users know how to execute it safely.
